@@ -19,11 +19,10 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Install PHP extensions
-RUN docker-php-ext-install \
-    pdo \
-    pdo_mysql \
-    redis \
-    opcache \
+RUN apk add --no-cache $PHPIZE_DEPS \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && docker-php-ext-install pdo pdo_mysql opcache \
     && docker-php-ext-enable opcache
 
 # Configure PHP

@@ -28,13 +28,56 @@ This project extends the official Kubernetes guestbook application with:
 
 ## 🚀 Quick Start
 
-1. **Prerequisites**:
+### Local Development (Windows)
+
+1. **Prerequisites:**
+   - Windows 10/11
+   - PowerShell (Run as Administrator)
+   - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   - [Chocolatey](https://chocolatey.org/) (auto-installed if missing)
+
+2. **Run the complete setup script:**
+   ```powershell
+   .\scripts\install-and-run.ps1
+   ```
+   This script will:
+   - Install all required tools (gcloud, Terraform, Helm, kubectl, Docker, Git, Make)
+   - Build and run the application locally using Docker
+   - Show application URLs and status
+
+   **Alternative:** For a lighter setup, use:
+   ```powershell
+   .\scripts\local-dev.ps1
+   # or
+   .\scripts\run-local.ps1
+   ```
+
+3. **Access the app:**
+   - Frontend: [http://localhost:8080](http://localhost:8080)
+   - Health: [http://localhost:8080/health](http://localhost:8080/health)
+
+### Local Development (Linux/macOS/WSL)
+
+1. **Prerequisites:**
+   - Docker
+   - Make
+   - Bash
+
+2. **Set up and run:**
+   ```bash
+   make dev-setup   # (if implemented)
+   # or use the Makefile targets below
+   ```
+
+### Cloud Deployment (GKE)
+
+1. **Prerequisites:**
    - Google Cloud SDK
    - Terraform >= 1.0
    - Helm >= 3.0
    - kubectl
 
-2. **Deploy Infrastructure**:
+2. **Deploy Infrastructure:**
    ```bash
    cd infrastructure
    terraform init
@@ -42,18 +85,50 @@ This project extends the official Kubernetes guestbook application with:
    terraform apply
    ```
 
-3. **Deploy Application**:
+3. **Configure kubectl:**
    ```bash
-   helm install guestbook ./helm/guestbook
+   gcloud container clusters get-credentials guestbook-modernized-cluster \
+     --zone us-central1-a \
+     --project <your-project-id>
    ```
 
-## 🔧 Features
+4. **Deploy Application:**
+   ```bash
+   helm install guestbook ./helm/guestbook
+   # or for specific environments:
+   helm install guestbook-dev helm/guestbook --namespace guestbook-dev --create-namespace --values helm/guestbook/values-dev.yaml
+   ```
 
-- **99.5% Deployment Reliability**: Advanced health checks and rolling updates
-- **80% Setup Time Reduction**: Automated Helm charts and Terraform
-- **Complete Monitoring**: Custom dashboards and alerting
-- **Security First**: Automated vulnerability scanning and compliance testing
-- **Multi-Environment**: Seamless dev/staging/production workflows
+5. **More details:** See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
+## 🛠️ Makefile Commands
+
+The Makefile provides convenient commands for common tasks:
+
+- `make install-infra`      # Deploy infrastructure with Terraform
+- `make destroy-infra`      # Destroy infrastructure
+- `make deploy-app`         # Deploy the application with Helm
+- `make upgrade-app`        # Upgrade the application
+- `make uninstall-app`      # Uninstall the application
+- `make deploy-monitoring`  # Deploy monitoring stack
+- `make test`               # Run all tests
+- `make security-scan`      # Run security scans
+- `make clean`              # Clean up temporary files
+- `make status`             # Show status of all components
+
+## 🧪 Testing & Security
+
+- **Run tests:**
+  ```bash
+  make test
+  ```
+- **Run security scans:**
+  ```bash
+  make security-scan
+  # or
+  ./security/scan.sh
+  ```
+- **CI/CD:** Automated testing, linting, and security scanning are run in GitHub Actions (see `.github/workflows/ci.yml` and `.github/workflows/cd.yml`).
 
 ## 📊 Monitoring
 
@@ -75,3 +150,11 @@ See the `docs/` directory for detailed documentation on:
 - Deployment procedures
 - Monitoring setup
 - Security policies
+
+## 🐞 Troubleshooting
+
+- **Docker not running:** Ensure Docker Desktop is started before running scripts.
+- **Permissions:** On Windows, always run PowerShell as Administrator for setup scripts.
+- **Ports in use:** Stop any existing containers using `docker stop guestbook-frontend guestbook-redis`.
+- **Script errors:** Check logs/output for details. Most scripts will print clear error messages.
+- **Cloud deployment issues:** See `docs/DEPLOYMENT.md` for troubleshooting GKE and Terraform.

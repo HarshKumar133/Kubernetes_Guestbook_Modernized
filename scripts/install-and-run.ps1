@@ -1,4 +1,4 @@
-# Complete Installation and Deployment Script for Kubernetes Guestbook Modernized
+﻿# Complete Installation and Deployment Script for Kubernetes Guestbook Modernized
 # This script installs all required tools and runs the complete application
 
 param(
@@ -121,6 +121,11 @@ function Start-LocalDevelopment {
     
     # Create environment file
     Log-Info "Creating environment configuration..."
+    $envDir = "applications\frontend"
+    if (!(Test-Path $envDir)) {
+        New-Item -ItemType Directory -Path $envDir -Force | Out-Null
+    }
+    $envFile = Join-Path $envDir ".env"
     $envContent = @"
 # Local Development Environment
 REDIS_HOST=redis
@@ -132,10 +137,10 @@ APP_ENV=development
 APP_DEBUG=true
 LOG_LEVEL=debug
 "@
-    $envContent | Out-File -FilePath "applications\frontend\.env" -Encoding UTF8 -Force
-    
-    # Stop any existing containers
-    Log-Info "Stopping any existing containers..."
+$envContent | Set-Content -Path $envFile -Encoding UTF8
+Write-Host "Stopping any existing containers..."`
+ -ForegroundColor Green`
+
     docker stop guestbook-frontend guestbook-redis 2>$null
     docker rm guestbook-frontend guestbook-redis 2>$null
     

@@ -9,8 +9,8 @@ LABEL description="Redis server for Kubernetes Guestbook Modernized"
 LABEL version="1.0.0"
 
 # Create redis user and group
-RUN addgroup -g 999 redis && \
-    adduser -D -s /bin/sh -u 999 -G redis redis
+RUN addgroup -g 999 redis || true && \
+    adduser -D -s /bin/sh -u 999 -G redis redis || true
 
 # Create necessary directories
 RUN mkdir -p /data /logs && \

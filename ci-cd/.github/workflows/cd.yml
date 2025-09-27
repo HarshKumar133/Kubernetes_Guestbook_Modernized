@@ -1,0 +1,295 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+env:
+  REGISTRY: us-central1-docker.pkg.dev
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REPOSITORY: guestbook-modernized-registry
+  CLUSTER_NAME: guestbook-modernized-cluster
+  CLUSTER_ZONE: us-central1-a
+
+jobs:
+  # Deploy to development
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    environment: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.CLUSTER_ZONE }} --project ${{ env.PROJECT_ID }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Deploy to development
+        run: |
+          helm upgrade --install guestbook-dev helm/guestbook \
+            --namespace guestbook-dev \
+            --create-namespace \
+            --values helm/guestbook/values-dev.yaml \
+            --set app.image.tag=${{ github.sha }} \
+            --wait --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=guestbook -n guestbook-dev --timeout=300s
+          
+          # Get service URL
+          SERVICE_IP=$(kubectl get svc guestbook-dev -n guestbook-dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Test health endpoint
+          curl -f http://$SERVICE_IP/health || exit 1
+          
+          # Test main page
+          curl -f http://$SERVICE_IP/ || exit 1
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          channel: '#deployments'
+          text: '✅ Development deployment successful!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    needs: [deploy-dev]
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.CLUSTER_ZONE }} --project ${{ env.PROJECT_ID }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Deploy to staging
+        run: |
+          helm upgrade --install guestbook-staging helm/guestbook \
+            --namespace guestbook-staging \
+            --create-namespace \
+            --values helm/guestbook/values-staging.yaml \
+            --set app.image.tag=${{ github.sha }} \
+            --wait --timeout=300s
+
+      - name: Run comprehensive tests
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=guestbook -n guestbook-staging --timeout=300s
+          
+          # Get service URL
+          SERVICE_IP=$(kubectl get svc guestbook-staging -n guestbook-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Test health endpoint
+          curl -f http://$SERVICE_IP/health || exit 1
+          
+          # Test main page
+          curl -f http://$SERVICE_IP/ || exit 1
+          
+          # Test Redis connectivity
+          kubectl exec -n guestbook-staging deployment/guestbook-staging -- redis-cli -h redis-master -a ${{ secrets.REDIS_PASSWORD }} ping
+
+      - name: Run performance tests
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/performance-test.js
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          channel: '#deployments'
+          text: '✅ Staging deployment successful!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    needs: [deploy-staging]
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.CLUSTER_ZONE }} --project ${{ env.PROJECT_ID }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Pre-deployment checks
+        run: |
+          # Check cluster health
+          kubectl get nodes
+          kubectl get pods --all-namespaces | grep -v Running | grep -v Completed || true
+          
+          # Check resource availability
+          kubectl top nodes
+          kubectl top pods --all-namespaces
+
+      - name: Deploy to production
+        run: |
+          helm upgrade --install guestbook-prod helm/guestbook \
+            --namespace guestbook-prod \
+            --create-namespace \
+            --values helm/guestbook/values-production.yaml \
+            --set app.image.tag=${{ github.sha }} \
+            --wait --timeout=600s
+
+      - name: Verify deployment
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=guestbook -n guestbook-prod --timeout=300s
+          
+          # Get service URL
+          SERVICE_IP=$(kubectl get svc guestbook-prod -n guestbook-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Test health endpoint
+          curl -f http://$SERVICE_IP/health || exit 1
+          
+          # Test main page
+          curl -f http://$SERVICE_IP/ || exit 1
+          
+          # Test Redis connectivity
+          kubectl exec -n guestbook-prod deployment/guestbook-prod -- redis-cli -h redis-master -a ${{ secrets.REDIS_PASSWORD }} ping
+
+      - name: Run production smoke tests
+        run: |
+          # Test all endpoints
+          SERVICE_IP=$(kubectl get svc guestbook-prod -n guestbook-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          
+          # Test health endpoint
+          curl -f http://$SERVICE_IP/health || exit 1
+          
+          # Test status endpoint
+          curl -f http://$SERVICE_IP/status || exit 1
+          
+          # Test main page
+          curl -f http://$SERVICE_IP/ || exit 1
+          
+          # Test form submission
+          curl -X POST http://$SERVICE_IP/ \
+            -d "name=Test&message=Hello World" \
+            -H "Content-Type: application/x-www-form-urlencoded" || exit 1
+
+      - name: Monitor deployment
+        run: |
+          # Monitor for 5 minutes
+          for i in {1..30}; do
+            echo "Check $i/30"
+            kubectl get pods -n guestbook-prod
+            kubectl top pods -n guestbook-prod
+            sleep 10
+          done
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          channel: '#deployments'
+          text: '🚀 Production deployment successful!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify deployment failure
+        uses: 8398a7/action-slack@v3
+        if: failure()
+        with:
+          status: failure
+          channel: '#deployments'
+          text: '❌ Production deployment failed!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Rollback on failure
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone ${{ env.CLUSTER_ZONE }} --project ${{ env.PROJECT_ID }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Rollback production deployment
+        run: |
+          helm rollback guestbook-prod -n guestbook-prod
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: warning
+          channel: '#deployments'
+          text: '⚠️ Production deployment rolled back due to failure!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

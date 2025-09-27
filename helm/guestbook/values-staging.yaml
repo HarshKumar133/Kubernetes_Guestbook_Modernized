@@ -1,0 +1,247 @@
+# Kubernetes Guestbook Modernized - Staging Environment Values
+# This file contains values specific to the staging environment
+
+# Override global settings for staging
+global:
+  imageRegistry: "us-central1-docker.pkg.dev/your-project-id/guestbook-modernized-registry"
+  imagePullSecrets:
+    - name: gcr-json-key
+
+# Application configuration for staging
+app:
+  environment: "staging"
+  replicas: 2
+  image:
+    tag: "staging-latest"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations: []
+  affinity: {}
+
+# Redis configuration for staging
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "staging-redis-password"
+  master:
+    persistence:
+      enabled: true
+      size: "4Gi"
+      storageClass: "standard-rwo"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations: []
+    affinity: {}
+  replica:
+    replicaCount: 1
+    persistence:
+      enabled: true
+      size: "4Gi"
+      storageClass: "standard-rwo"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+
+# Ingress configuration for staging
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: guestbook-staging.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: guestbook-staging-tls
+      hosts:
+        - guestbook-staging.your-domain.com
+
+# Service configuration for staging
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+# ConfigMap configuration for staging
+configMap:
+  enabled: true
+  data:
+    REDIS_HOST: "redis-master"
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: "staging-redis-password"
+    PHP_MEMORY_LIMIT: "128M"
+    PHP_MAX_EXECUTION_TIME: "30"
+    PHP_UPLOAD_MAX_FILESIZE: "2M"
+    PHP_POST_MAX_SIZE: "8M"
+    APP_ENV: "staging"
+    APP_DEBUG: "false"
+    LOG_LEVEL: "info"
+
+# Secret configuration for staging
+secret:
+  enabled: true
+  data:
+    redis-password: "staging-redis-password"
+
+# Network Policy configuration for staging
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app: guestbook
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Pod Disruption Budget for staging
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Horizontal Pod Autoscaler for staging
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Monitoring configuration for staging
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+      labels:
+        environment: "staging"
+  grafana:
+    enabled: true
+    dashboard:
+      enabled: true
+      configMap: "guestbook-dashboard-staging"
+  alerts:
+    enabled: true
+    rules:
+      - alert: GuestbookHighCPU
+        expr: rate(container_cpu_usage_seconds_total{container="guestbook"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on guestbook"
+      - alert: GuestbookHighMemory
+        expr: container_memory_usage_bytes{container="guestbook"} / container_spec_memory_limit_bytes{container="guestbook"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on guestbook"
+
+# Security configuration for staging
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: true
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+    rules: []
+
+# Health checks for staging
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+
+# Rolling update configuration for staging
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+  strategy: RollingUpdate
+
+# Labels and annotations for staging
+labels:
+  app: guestbook
+  version: "1.0.0"
+  environment: "staging"
+  managed-by: "helm"
+  tier: "frontend"
+
+annotations:
+  deployment.kubernetes.io/revision: "1"
+  kubernetes.io/change-cause: "Staging deployment"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "80"
+  prometheus.io/path: "/metrics"

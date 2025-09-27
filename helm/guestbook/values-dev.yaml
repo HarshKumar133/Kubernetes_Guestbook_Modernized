@@ -1,0 +1,183 @@
+# Kubernetes Guestbook Modernized - Development Environment Values
+# This file contains values specific to the development environment
+
+# Override global settings for development
+global:
+  imageRegistry: "us-central1-docker.pkg.dev/your-project-id/guestbook-modernized-registry"
+  imagePullSecrets:
+    - name: gcr-json-key
+
+# Application configuration for development
+app:
+  environment: "dev"
+  replicas: 1
+  image:
+    tag: "dev-latest"
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations: []
+  affinity: {}
+
+# Redis configuration for development
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "dev-redis-password"
+  master:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "100m"
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations: []
+    affinity: {}
+  replica:
+    replicaCount: 0
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "100m"
+
+# Ingress configuration for development
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: guestbook-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Service configuration for development
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+# ConfigMap configuration for development
+configMap:
+  enabled: true
+  data:
+    REDIS_HOST: "redis-master"
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: "dev-redis-password"
+    PHP_MEMORY_LIMIT: "64M"
+    PHP_MAX_EXECUTION_TIME: "30"
+    PHP_UPLOAD_MAX_FILESIZE: "2M"
+    PHP_POST_MAX_SIZE: "8M"
+    APP_ENV: "development"
+    APP_DEBUG: "true"
+    LOG_LEVEL: "debug"
+
+# Secret configuration for development
+secret:
+  enabled: true
+  data:
+    redis-password: "dev-redis-password"
+
+# Network Policy configuration for development
+networkPolicy:
+  enabled: false
+
+# Pod Disruption Budget for development
+podDisruptionBudget:
+  enabled: false
+
+# Horizontal Pod Autoscaler for development
+autoscaling:
+  enabled: false
+
+# Monitoring configuration for development
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+  alerts:
+    enabled: false
+
+# Security configuration for development
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: false
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+    rules: []
+
+# Health checks for development
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+
+# Rolling update configuration for development
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+  strategy: RollingUpdate
+
+# Labels and annotations for development
+labels:
+  app: guestbook
+  version: "1.0.0"
+  environment: "dev"
+  managed-by: "helm"
+  tier: "frontend"
+
+annotations:
+  deployment.kubernetes.io/revision: "1"
+  kubernetes.io/change-cause: "Development deployment"
+  prometheus.io/scrape: "false"

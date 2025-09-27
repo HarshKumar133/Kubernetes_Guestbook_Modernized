@@ -1,0 +1,40 @@
+apiVersion: v2
+name: guestbook
+description: Kubernetes Guestbook Modernized - Enterprise-grade guestbook application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/your-org/kubernetes-guestbook-modernized
+sources:
+  - https://github.com/your-org/kubernetes-guestbook-modernized
+maintainers:
+  - name: DevOps Team
+    email: devops@company.com
+keywords:
+  - guestbook
+  - redis
+  - php
+  - kubernetes
+  - enterprise
+  - monitoring
+annotations:
+  category: Application
+  licenses: MIT
+  images: |
+    - name: guestbook-frontend
+      image: guestbook-modernized/frontend:latest
+    - name: guestbook-redis
+      image: guestbook-modernized/redis:latest
+dependencies:
+  - name: redis
+    version: 17.11.3
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: prometheus
+    version: 25.8.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: monitoring.prometheus.enabled
+  - name: grafana
+    version: 7.0.0
+    repository: https://grafana.github.io/helm-charts
+    condition: monitoring.grafana.enabled

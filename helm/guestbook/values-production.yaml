@@ -1,0 +1,313 @@
+# Kubernetes Guestbook Modernized - Production Environment Values
+# This file contains values specific to the production environment
+
+# Override global settings for production
+global:
+  imageRegistry: "us-central1-docker.pkg.dev/your-project-id/guestbook-modernized-registry"
+  imagePullSecrets:
+    - name: gcr-json-key
+
+# Application configuration for production
+app:
+  environment: "production"
+  replicas: 3
+  image:
+    tag: "production-latest"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "400m"
+  nodeSelector:
+    kubernetes.io/os: linux
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - guestbook
+            topologyKey: kubernetes.io/hostname
+
+# Redis configuration for production
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "production-redis-password"
+  master:
+    persistence:
+      enabled: true
+      size: "20Gi"
+      storageClass: "ssd"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "400m"
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations: []
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - redis
+              topologyKey: kubernetes.io/hostname
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: "20Gi"
+      storageClass: "ssd"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "400m"
+    nodeSelector:
+      kubernetes.io/os: linux
+    tolerations: []
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - redis
+              topologyKey: kubernetes.io/hostname
+
+# Ingress configuration for production
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  hosts:
+    - host: guestbook.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: guestbook-production-tls
+      hosts:
+        - guestbook.your-domain.com
+
+# Service configuration for production
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+# ConfigMap configuration for production
+configMap:
+  enabled: true
+  data:
+    REDIS_HOST: "redis-master"
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: "production-redis-password"
+    PHP_MEMORY_LIMIT: "256M"
+    PHP_MAX_EXECUTION_TIME: "30"
+    PHP_UPLOAD_MAX_FILESIZE: "2M"
+    PHP_POST_MAX_SIZE: "8M"
+    APP_ENV: "production"
+    APP_DEBUG: "false"
+    LOG_LEVEL: "error"
+    SESSION_LIFETIME: "120"
+    CACHE_TTL: "3600"
+
+# Secret configuration for production
+secret:
+  enabled: true
+  data:
+    redis-password: "production-redis-password"
+
+# Network Policy configuration for production
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+        - podSelector:
+            matchLabels:
+              app: guestbook
+      ports:
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Pod Disruption Budget for production
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Horizontal Pod Autoscaler for production
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 70
+
+# Monitoring configuration for production
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+      scrapeTimeout: 10s
+      labels:
+        environment: "production"
+  grafana:
+    enabled: true
+    dashboard:
+      enabled: true
+      configMap: "guestbook-dashboard-production"
+  alerts:
+    enabled: true
+    rules:
+      - alert: GuestbookHighCPU
+        expr: rate(container_cpu_usage_seconds_total{container="guestbook"}[5m]) > 0.8
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High CPU usage on guestbook"
+          description: "CPU usage is above 80% for more than 2 minutes"
+      - alert: GuestbookHighMemory
+        expr: container_memory_usage_bytes{container="guestbook"} / container_spec_memory_limit_bytes{container="guestbook"} > 0.8
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High memory usage on guestbook"
+          description: "Memory usage is above 80% for more than 2 minutes"
+      - alert: GuestbookPodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{container="guestbook"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Guestbook pod is crash looping"
+          description: "Pod {{ $labels.pod }} is restarting frequently"
+      - alert: GuestbookUnavailable
+        expr: up{job="guestbook"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Guestbook is unavailable"
+          description: "Guestbook service is down"
+
+# Security configuration for production
+security:
+  podSecurityPolicy:
+    enabled: true
+  networkPolicy:
+    enabled: true
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  rbac:
+    create: true
+    rules: []
+
+# Health checks for production
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+
+# Rolling update configuration for production
+rollingUpdate:
+  maxSurge: 1
+  maxUnavailable: 0
+  strategy: RollingUpdate
+
+# Labels and annotations for production
+labels:
+  app: guestbook
+  version: "1.0.0"
+  environment: "production"
+  managed-by: "helm"
+  tier: "frontend"
+
+annotations:
+  deployment.kubernetes.io/revision: "1"
+  kubernetes.io/change-cause: "Production deployment"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "80"
+  prometheus.io/path: "/metrics"

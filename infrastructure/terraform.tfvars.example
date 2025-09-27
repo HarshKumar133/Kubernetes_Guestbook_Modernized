@@ -1,0 +1,48 @@
+# Kubernetes Guestbook Modernized - Terraform Variables Example
+# Copy this file to terraform.tfvars and update the values
+
+# Project Configuration
+project_id   = "your-gcp-project-id"
+project_name = "guestbook-modernized"
+environment  = "dev"
+
+# Region and Zone Configuration
+region = "us-central1"
+zone   = "us-central1-a"
+
+# Network Configuration
+subnet_cidr    = "10.0.0.0/24"
+pods_cidr      = "10.1.0.0/16"
+services_cidr  = "10.2.0.0/20"
+master_cidr    = "172.16.0.0/28"
+
+# Cluster Configuration
+node_count      = 3
+min_node_count  = 1
+max_node_count  = 10
+machine_type    = "e2-medium"
+disk_size_gb    = 50
+
+# Monitoring Configuration
+enable_monitoring           = true
+enable_managed_prometheus   = true
+
+# Security Configuration
+enable_network_policy        = true
+enable_workload_identity     = true
+enable_binary_authorization  = true
+
+# Cost Management
+enable_cost_management = true
+
+# Maintenance Window
+maintenance_start_time = "02:00"
+maintenance_end_time   = "06:00"
+
+# Tags
+tags = {
+  Project     = "Kubernetes Guestbook Modernized"
+  Environment = "Development"
+  ManagedBy   = "Terraform"
+  Owner       = "DevOps Team"
+}

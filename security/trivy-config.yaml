@@ -1,0 +1,58 @@
+# Trivy Configuration for Kubernetes Guestbook Modernized
+# Comprehensive security scanning configuration
+
+# Global settings
+format: table
+severity: HIGH,CRITICAL
+exit-code: 1
+no-progress: true
+quiet: false
+
+# Vulnerability scanning
+vuln-type: os,library
+security-checks: vuln,config,secret
+
+# Secret scanning
+secret-config:
+  enable-rules:
+    - "aws-access-key-id"
+    - "aws-secret-access-key"
+    - "github-token"
+    - "private-key"
+    - "password"
+    - "api-key"
+    - "database-password"
+    - "redis-password"
+  disable-rules: []
+  severity: HIGH,CRITICAL
+
+# Configuration scanning
+config-policy:
+  - policy: "p/kubernetes"
+  - policy: "p/docker"
+  - policy: "p/terraform"
+  - policy: "p/helm"
+
+# File scanning
+file-patterns:
+  - "*.yaml"
+  - "*.yml"
+  - "*.json"
+  - "*.tf"
+  - "*.tfvars"
+  - "Dockerfile*"
+  - "*.php"
+  - "*.js"
+  - "*.py"
+
+# Exclude patterns
+exclude-patterns:
+  - "node_modules/"
+  - ".git/"
+  - "vendor/"
+  - "*.log"
+  - "*.tmp"
+
+# Output settings
+output: "security-report.txt"
+format: "table"

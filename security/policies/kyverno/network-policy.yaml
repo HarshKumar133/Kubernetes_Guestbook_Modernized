@@ -1,0 +1,28 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-network-policy
+  annotations:
+    policies.kyverno.io/title: Require Network Policy
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Network policies are an important security control to restrict
+      network traffic between pods. This policy ensures that all pods
+      have a network policy applied.
+spec:
+  validationFailureAction: enforce
+  background: true
+  rules:
+  - name: check-network-policy
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+    validate:
+      message: "Network policy is required for all pods"
+      pattern:
+        metadata:
+          annotations:
+            "net.beta.kubernetes.io/network-policy": "true"
